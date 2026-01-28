@@ -1,22 +1,22 @@
 fx_version 'cerulean'
 game 'gta5'
 author 'Jeler Security Systems'
-description 'Competitive Anti-Cheat Ultimate'
-version '4.0.0'
-lua54 'yes' -- CRÍTICO: Optimización OneSync
+description 'Universal Competitive Anti-Cheat'
+version '5.5.0'
+lua54 'yes' -- Requerido para máximo rendimiento y matemáticas precisas
 
 shared_script 'config.lua'
 
 server_scripts {
-    'server/math_utils.lua', -- Cargar primero (Librería)
-    'server/main.lua'        -- Cargar segundo (Lógica)
+    'server/math_utils.lua',
+    'server/main.lua'
 }
 
 client_scripts {
     'client/main.lua'
 }
 
--- Proteger código lógica, dejar config abierta para el cliente
+-- Deja la config abierta para que el dueño la edite
 escrow_ignore {
     'config.lua',
     'README.md'
