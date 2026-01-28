@@ -1,5 +1,5 @@
 local SecurityToken = nil
-local CurrentSeq = 0 -- Contador de Secuencia (Stateful)
+local CurrentSeq = 0 
 local initialized = false
 
 -- 1. SOLICITAR TOKEN
@@ -13,7 +13,7 @@ end)
 RegisterNetEvent('jeler:setToken')
 AddEventHandler('jeler:setToken', function(token)
     SecurityToken = token
-    CurrentSeq = 0 -- Iniciar secuencia
+    CurrentSeq = 0
     initialized = true
     print("Jeler AC: Protected & Running.")
 end)
@@ -22,8 +22,7 @@ end)
 RegisterNetEvent('jeler:updateToken')
 AddEventHandler('jeler:updateToken', function(newToken)
     SecurityToken = newToken
-    CurrentSeq = 0 -- Resetear secuencia para sincronizar con servidor
-    -- print("Jeler AC: Token Rotated.")
+    CurrentSeq = 0 -- Sincronizar secuencia con server
 end)
 
 -- 4. HEARTBEAT SEGURO (CON SECUENCIA)
@@ -37,7 +36,7 @@ Citizen.CreateThread(function()
     end
 end)
 
--- 5. DETECTORES (FLAGS)
+-- 5. DETECTORES
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)

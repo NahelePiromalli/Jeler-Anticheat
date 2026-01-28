@@ -7,8 +7,8 @@ local GodmodeStrikes = {}
 local EntityRates = {}     
 local LastHeartbeat = {} 
 
--- NUEVO SISTEMA DE SEGURIDAD
-local PlayerSecurity = {} -- Estructura: { [src] = { token = "xyz", sequence = 0 } }
+-- SISTEMA DE SEGURIDAD STATEFUL
+local PlayerSecurity = {} -- { [src] = { token = "xyz", sequence = 0 } }
 
 -- CACHÉ
 local BlacklistedVehHashes = {}
@@ -38,21 +38,23 @@ Citizen.CreateThread(function()
     if Config.WhitelistedVehicles then
         for _, v in pairs(Config.WhitelistedVehicles) do WhitelistedVehHashes[GetHashKey(v)] = true end
     end
-    print("^2[Jeler AC] ^7Sistema Iniciado (Stateful Tokens Activos).")
+    print("^2[Jeler AC] ^7Secure State System Iniciado.")
 end)
 
 -- =============================================================================
--- SISTEMA DE TOKENS DINÁMICOS Y STATEFUL
+-- TOKEN SEGURO & STATEFUL
 -- =============================================================================
 
--- Generador de Tokens con Entropía (ID + Time + Nonce)
+-- 1. Generador Criptográfico (Simulado)
 local function GenerateSecureToken(src, nonce)
     local time = os.time()
+    local clock = os.clock() * 1000 -- Milisegundos para más entropía
     local salt = math.random(100000, 999999)
-    -- Simulamos un hash complejo combinando factores variables
-    local rawString = string.format("%s:%s:%s:%s", src, time, nonce, salt)
     
-    -- "Hash" manual simple (XOR mix) para evitar texto plano
+    -- Mezclamos ID, Tiempo, Clock, Nonce y Salt
+    local rawString = string.format("%s:%s:%s:%s:%s", src, time, clock, nonce, salt)
+    
+    -- Pseudo-Hashing (XOR Obfuscation)
     local hash = ""
     for i = 1, #rawString do
         local byte = string.byte(rawString, i)
@@ -62,52 +64,48 @@ local function GenerateSecureToken(src, nonce)
     return hash
 end
 
--- Validador Stateful (Verifica Token y Orden de Eventos)
+-- 2. Validador Stateful (Anti-Replay)
 local function ValidateToken(src, receivedToken, receivedSeq)
     local data = PlayerSecurity[src]
     
-    -- 1. Existe sesión?
+    -- Verificar sesión
     if not data then 
-        DropPlayer(src, "🛡️ Jeler AC: No Session Data")
+        DropPlayer(src, "🛡️ Jeler AC: No Session (Relog)")
         return false 
     end
 
-    -- 2. Token coincide?
+    -- Verificar Token exacto
     if data.token ~= receivedToken then
-        DropPlayer(src, "🛡️ Jeler AC: Invalid Security Token")
+        DropPlayer(src, "🛡️ Jeler AC: Security Token Invalid")
         return false
     end
 
-    -- 3. Validación de Secuencia (Solo si se provee seq, ej: Heartbeat)
-    -- Esto evita ataques de repetición (Replay Attacks)
+    -- Verificar Secuencia (Si el evento requiere orden, como el Heartbeat)
     if receivedSeq then
         if receivedSeq <= data.sequence then
-            -- Paquete antiguo o duplicado (posible lag o ataque)
-            -- No baneamos directo por UDP, pero ignoramos el paquete
+            -- Paquete viejo o repetido (Replay Attack o Lag Extremo)
+            -- No baneamos para evitar falsos por UDP, pero ignoramos el paquete
             return false
         end
-        data.sequence = receivedSeq -- Actualizamos la secuencia esperada
+        data.sequence = receivedSeq -- Actualizamos estado
     end
 
     return true
 end
 
--- Hilo de Rotación de Tokens (Cada X minutos)
+-- 3. Hilo de Rotación de Tokens
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(Config.TokenRotationInterval * 1000)
         
-        print("^4[Jeler AC] ^7Rotando tokens de seguridad...")
-        local nonce = math.random(1, 1000)
+        -- print("^4[Jeler AC] ^7Rotando claves de seguridad...")
+        local nonce = math.random(1, 10000)
         
         for _, playerId in ipairs(GetPlayers()) do
             if PlayerSecurity[playerId] then
                 local newToken = GenerateSecureToken(playerId, nonce)
                 PlayerSecurity[playerId].token = newToken
-                -- Reseteamos secuencia o la mantenemos? Mejor mantener para continuidad,
-                -- o resetear si el cliente también resetea. 
-                -- Para seguridad, vamos a sincronizar el reset.
-                PlayerSecurity[playerId].sequence = 0 
+                PlayerSecurity[playerId].sequence = 0 -- Reset de secuencia seguro
                 
                 TriggerClientEvent('jeler:updateToken', playerId, newToken)
             end
@@ -132,7 +130,7 @@ AddEventHandler('jeler:requestToken', function()
 end)
 
 -- =============================================================================
--- GESTIÓN DE BANEO
+-- BANEO Y SOSPECHA
 -- =============================================================================
 function AddSuspicion(source, points, reason)
     if not PlayerSuspicion[source] then PlayerSuspicion[source] = 0.0 end
@@ -151,10 +149,8 @@ function AddSuspicion(source, points, reason)
 end
 
 -- =============================================================================
--- MÓDULOS DE PROTECCIÓN
+-- PROTECCIÓN (HONEYPOTS, ANTI-SPAM, ETC)
 -- =============================================================================
-
--- Honeypots
 local HoneyPotEvents = {
     "esx:giveInventoryItem", "admin:reviveAll", "bank:transfer",
     "vrp:addMoney", "qb-core:server:Player:SetPlayerData", "anticheat:bypass"
@@ -166,7 +162,6 @@ for _, eventName in pairs(HoneyPotEvents) do
     end)
 end
 
--- Anti-Spam
 AddEventHandler('entityCreating', function(entity)
     if not isAuthenticated then return end
     local owner = NetworkGetEntityOwner(entity)
@@ -190,7 +185,6 @@ AddEventHandler('entityCreating', function(entity)
 end)
 Citizen.CreateThread(function() while true do Citizen.Wait(1000); EntityRates = {} end end)
 
--- Anti-Explosiones
 AddEventHandler('explosionEvent', function(sender, ev)
     if not sender then CancelEvent(); return end
     for _, type in ipairs(Config.BlacklistedExplosions) do
@@ -198,7 +192,6 @@ AddEventHandler('explosionEvent', function(sender, ev)
     end
 end)
 
--- Anti-Command Injection
 AddEventHandler('executeCommand', function(commandSource, command)
     if not commandSource or commandSource == 0 then return end
     local cmd = string.lower(command)
@@ -213,7 +206,7 @@ AddEventHandler('executeCommand', function(commandSource, command)
 end)
 
 -- =============================================================================
--- COMBATE Y HEURÍSTICA
+-- ANÁLISIS DE COMBATE
 -- =============================================================================
 AddEventHandler('weaponDamageEvent', function(sender, data)
     if not isAuthenticated then return end
@@ -224,7 +217,6 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
     if not DoesEntityExist(victimPed) or not IsPedAPlayer(victimPed) then return end
     if data.weaponDamage <= 0 then return end
 
-    -- Max Damage Limit
     local damageLimit = 250
     local weaponHash = GetSelectedPedWeapon(shooter)
     local wClass = WeaponGroups[weaponHash] or 'default'
@@ -235,7 +227,6 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
         return 
     end
 
-    -- Godmode Check
     local healthBefore = GetEntityHealth(victimPed)
     local armorBefore = GetPedArmour(victimPed)
 
@@ -261,7 +252,6 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
         end
     end)
     
-    -- Aim Analysis
     if IsPlayerAceAllowed(sender, "jeler.bypass") then return end
 
     local wConfig = Config.WeaponClasses[wClass]
@@ -320,7 +310,6 @@ Citizen.CreateThread(function()
                 local ped = GetPlayerPed(playerId)
                 
                 if DoesEntityExist(ped) and not IsPlayerAceAllowed(playerId, "jeler.bypass") then
-                    -- Vehículos
                     local vehicle = GetVehiclePedIsIn(ped, false)
                     local isInVehicle = (vehicle ~= 0)
                     local model = 0
@@ -331,13 +320,11 @@ Citizen.CreateThread(function()
                             elseif Config.BlacklistAction == "delete" then DeleteEntity(vehicle) end
                         end
                     end
-                    -- Armas
                     local weaponHash = GetSelectedPedWeapon(ped)
                     if weaponHash ~= -1569615261 and BlacklistedWepHashes[weaponHash] then
                         if Config.BlacklistAction == "ban" then AddSuspicion(playerId, 100, "Arma Prohibida")
                         elseif Config.BlacklistAction == "delete" then RemoveWeaponFromPed(ped, weaponHash) end
                     end
-                    -- Movimiento
                     local pos = GetEntityCoords(ped)
                     if PlayerPositions[playerId] then
                         local distance = #(pos - PlayerPositions[playerId])
@@ -388,7 +375,6 @@ Citizen.CreateThread(function()
     end
 end)
 
--- SISTEMA BASE
 AddEventHandler('onResourceStart', function(res)
     if GetCurrentResourceName() ~= res then return end
     if Config.LicenseKey == "TEST-DEV-KEY" then isAuthenticated = true else isAuthenticated = true end
@@ -421,7 +407,7 @@ end)
 RegisterNetEvent('jeler:flag')
 AddEventHandler('jeler:flag', function(token, reason)
     local src = source
-    -- Las flags no usan secuencia estricta porque son esporádicas, pero validamos el token
+    -- Flags no usan secuencia estricta, solo token
     if not ValidateToken(src, token) then return end
     AddSuspicion(src, 100, "Client Flag: " .. reason)
 end)
@@ -429,7 +415,7 @@ end)
 RegisterNetEvent('jeler:heartbeat')
 AddEventHandler('jeler:heartbeat', function(token, seq)
     local src = source
-    -- El heartbeat SI usa secuencia para asegurar orden
+    -- Heartbeat usa secuencia para asegurar orden
     if not ValidateToken(src, token, seq) then return end
     LastHeartbeat[src] = os.time()
 end)

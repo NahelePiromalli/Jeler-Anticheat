@@ -13,7 +13,7 @@ Config.BlacklistedWeapons = {
 }
 Config.BlacklistAction = "ban" 
 
--- [3] BYPASS VEHÍCULOS
+-- [3] BYPASS VEHÍCULOS (WHITELIST)
 Config.WhitelistedVehicles = {
     "police", "cargoplane", "volaticus", "deluxo", 
     "ferrari488", "supra_mk4", "gtr_r35"
@@ -51,14 +51,14 @@ Config.MaxEntitiesPerSecond = 10
 Config.BlacklistedEntities = { "prop_windmill_01", "p_spinning_anus_s", "cargoplane", "blimp" }
 Config.BlacklistedExplosions = { 29, 30, 31, 32 }
 
--- [8] ANTI-STOP RESOURCE (WATCHDOG)
+-- [8] ANTI-STOP RESOURCE
 Config.HeartbeatTimeout = 60 
 
 -- [9] DETECTOR DE TECLAS
 Config.BlacklistedKeys = {
-    { key = 121, name = "INSERT (Menu Key)" },
-    { key = 212, name = "HOME (Menu Key)" },
-    { key = 178, name = "DELETE (Menu Key)" }
+    { key = 121, name = "INSERT" },
+    { key = 212, name = "HOME" },
+    { key = 178, name = "DELETE" }
 }
 
 -- [10] COMANDOS PROHIBIDOS
@@ -67,4 +67,4 @@ Config.BlacklistedCommands = {
 }
 
 -- [17] SEGURIDAD DE TOKEN (NUEVO)
-Config.TokenRotationInterval = 300 -- Segundos (Cada 5 minutos se cambia la clave de cifrado)
+Config.TokenRotationInterval = 300 -- Segundos (Cada 5 min rota la clave)
