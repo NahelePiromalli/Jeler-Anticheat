@@ -2,14 +2,12 @@ MathUtils = {}
 local PI = math.pi
 local DEGRAD = PI / 180.0
 
--- Normalizar Vector (Longitud 1)
 function MathUtils.NormalizeVector(v)
     local len = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
     if len == 0 then return vector3(0, 0, 0) end
     return vector3(v.x / len, v.y / len, v.z / len)
 end
 
--- Rotación a Dirección
 function MathUtils.RotationToDirection(rotation)
     local adjustedRotation = vector3(DEGRAD * rotation.x, DEGRAD * rotation.y, DEGRAD * rotation.z)
     local direction = vector3(
@@ -20,7 +18,6 @@ function MathUtils.RotationToDirection(rotation)
     return direction
 end
 
--- Ángulo entre Vectores
 function MathUtils.CalculateAngle(v1, v2)
     local dot = (v1.x * v2.x) + (v1.y * v2.y) + (v1.z * v2.z)
     local mag1 = math.sqrt(v1.x^2 + v1.y^2 + v1.z^2)
@@ -31,7 +28,6 @@ function MathUtils.CalculateAngle(v1, v2)
     return math.deg(math.acos(cosTheta))
 end
 
--- Distancia Punto a Línea (Para Magic Bullet)
 function MathUtils.DistanceFromLineToPoint(lineStart, lineDir, point)
     local w = point - lineStart
     local c1 = (w.x * lineDir.x) + (w.y * lineDir.y) + (w.z * lineDir.z)
@@ -40,21 +36,18 @@ function MathUtils.DistanceFromLineToPoint(lineStart, lineDir, point)
     return #(point - projection)
 end
 
--- Obtener Cabeza Segura
 function MathUtils.GetHeadCoords(ped)
     local success, coords = pcall(GetPedBoneCoords, ped, 31086, 0.0, 0.0, 0.0)
     if success and coords.x ~= 0 then return coords end
     return GetEntityCoords(ped)
 end
 
--- ESTADÍSTICA: Promedio
 function MathUtils.Average(t)
     local sum = 0
     for _,v in pairs(t) do sum = sum + v end
     return sum / #t
 end
 
--- ESTADÍSTICA: Desviación Estándar (Para detectar Robots/Low FOV)
 function MathUtils.StandardDeviation(t)
     local m = MathUtils.Average(t)
     local vm = 0

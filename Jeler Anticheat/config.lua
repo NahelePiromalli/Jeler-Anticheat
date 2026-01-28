@@ -1,42 +1,53 @@
 Config = {}
 
--- [1] LICENCIA SAAS
--- Usa "TEST-DEV-KEY" para probar sin servidor API externo.
+-- [1] LICENCIA Y DEBUG
 Config.LicenseKey = "TEST-DEV-KEY" 
+Config.DebugMode = true -- Pon false en producción
 
--- [2] SISTEMA DE INTEGRIDAD (CREDIT SCORE)
--- Umbral de baneo. Si la sospecha llega a 100, Adiós.
-Config.BanThreshold = 100.0 
--- Puntos que se RESTAN por cada tiro legítimo (Premio al jugador Pro).
-Config.LegitReward = 3.0    
+-- [2] LISTAS NEGRAS (VEHÍCULOS Y ARMAS PROHIBIDAS)
+Config.BlacklistedVehicles = {
+    "rhino", "lazer", "hydra", "oppressor", "oppressor2", "khanjali", "cargoplane"
+}
+Config.BlacklistedWeapons = {
+    "WEAPON_RPG", "WEAPON_MINIGUN", "WEAPON_RAILGUN", "WEAPON_GARBAGEBAG", "WEAPON_HOMINGLAUNCHER"
+}
+Config.BlacklistAction = "ban" -- "ban", "delete" o "log"
 
--- [3] HEURÍSTICA (DETECCIÓN DE "LEGIT CHEATS")
-Config.AnalysisWindow = 20 -- Analizar bloques de 20 disparos
-Config.MinBoneVariety = 3  -- Un humano debe pegar en al menos 3 huesos distintos en 20 tiros.
-Config.MinAngularVariance = 0.4 -- Si la varianza es menor a esto, es un robot (Aim Lock Suave).
-
--- [4] TOLERANCIAS DE ÁNGULO (SILENT AIM)
-Config.WeaponClasses = {
-    ['default'] = { tolerance = 6.0, severity = 10 },
-    ['sniper']  = { tolerance = 3.5, severity = 25 }, -- Snipers deben ser precisos
-    ['shotgun'] = { tolerance = 14.0, severity = 5 }, -- Escopetas dispersan mucho
-    ['smg']     = { tolerance = 8.0, severity = 8 },
+-- [3] BYPASS VEHÍCULOS (WHITELIST)
+-- Agrega aquí los nombres de tus autos custom rápidos para que NO sean detectados como Speedhack.
+Config.WhitelistedVehicles = {
+    "police", "cargoplane", "volaticus", "deluxo", 
+    "ferrari488", "supra_mk4", "gtr_r35" -- Tus autos custom aquí
 }
 
--- [5] MAGIC BULLET (HITBOX EXPANSION)
--- Distancia máxima permitida entre la línea de mira y la hitbox (Metros).
--- 0.25m = 25cm (Permite un poco de lag, pero detecta expansiones grandes).
-Config.MaxHitboxRadius = 0.25 
-Config.MagicBulletSeverity = 40 -- Castigo severo.
+-- [4] LÍMITES DE MOVIMIENTO
+Config.NoclipCheckInterval = 2000 
+Config.MaxRunSpeed = 12.0 -- Max velocidad a pie (Server-side)
+Config.MaxFlyHeight = 10.0 -- Max altura salto (Server-side)
+Config.MaxVehicleSpeed = 60.0 -- Max velocidad vehículo (60m/s = ~216km/h). Ignorado si está en Whitelist.
+Config.MaxWalkSpeed = 3.5 -- (Client-side)
+Config.MaxSprintSpeed = 7.5 -- (Client-side)
 
--- [6] AJUSTES DE RED
-Config.PingAssist = 110 -- MS de Ping para empezar a relajar la seguridad.
-Config.DebugMode = true -- Ver datos matemáticos en consola del servidor.
+-- [5] TOLERANCIAS DE AIM (SILENT AIM)
+Config.WeaponClasses = {
+    ['default'] = { tolerance = 6.0, severity = 10 },
+    ['sniper']  = { tolerance = 3.5, severity = 25 },
+    ['shotgun'] = { tolerance = 14.0, severity = 5 },
+    ['smg']     = { tolerance = 8.0, severity = 8 },
+}
+Config.MaxHitboxRadius = 0.25 -- 25cm (Magic Bullet)
 
--- [7] DETECCIÓN DE NOCLIP / SPEEDHACK
-Config.NoclipCheckInterval = 2000 -- Chequear cada 2 segundos (Ahorra CPU)
-Config.MaxRunSpeed = 12.0 -- Metros por segundo (Humano corriendo ~7m/s)
-Config.MaxFlyHeight = 10.0 -- Si sube X metros sin vehículo, es sospechoso.
+-- [6] SISTEMA DE INTEGRIDAD
+Config.BanThreshold = 100.0 
+Config.LegitReward = 3.0    
+Config.AnalysisWindow = 20
+Config.MinBoneVariety = 3 
+Config.MinAngularVariance = 0.4
+Config.PingAssist = 110
 
--- [8] DETECCIÓN DE GODMODE
-Config.GodmodeStrikes = 4 -- Cuántas veces debe bloquear daño antes de banear (Por si hay desync)
+-- [7] SEGURIDAD AVANZADA
+Config.GodmodeStrikes = 4
+Config.MagicBulletSeverity = 40
+Config.MaxEntitiesPerSecond = 10 
+Config.BlacklistedEntities = { "prop_windmill_01", "p_spinning_anus_s", "cargoplane", "blimp" }
+Config.BlacklistedExplosions = { 29, 30, 31, 32 }
