@@ -1,4 +1,4 @@
-print("^2>>> JELER AC: CLIENTE CARGADO EXITOSAMENTE (v9.5 - FULL TEST MODE) <<<")
+print("^2>>> JELER AC: CLIENTE CARGADO EXITOSAMENTE (v10.0 - FULL TEST MODE) <<<")
 
 local SecurityToken = nil
 local CurrentSeq = 0 
@@ -70,10 +70,10 @@ Citizen.CreateThread(function()
     end
 end)
 
--- 5. DETECTORES DE TECLAS
+-- 5. DETECTORES DE TECLAS [OPTIMIZADO]
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(0)
+        Citizen.Wait(10) -- Optimización de CPU (0 -> 10)
         if initialized and SecurityToken then
             for _, entry in ipairs(Config.BlacklistedKeys) do
                 if IsControlJustPressed(0, entry.key) then

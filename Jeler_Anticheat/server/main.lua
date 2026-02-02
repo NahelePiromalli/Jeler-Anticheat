@@ -5,6 +5,7 @@ local PlayerPositions = {}
 local GodmodeStrikes = {}  
 local EntityRates = {}     
 local LastHeartbeat = {} 
+local SpamGuard = {} -- [OPTIMIZACIÓN] Anti-Spam de eventos
 
 -- NUEVO: Historial de Rotación para Snap Check
 local PlayerRotations = {} 
@@ -35,7 +36,7 @@ Citizen.CreateThread(function()
     if Config.WhitelistedVehicles then
         for _, v in pairs(Config.WhitelistedVehicles) do WhitelistedVehHashes[GetHashKey(v)] = true end
     end
-    print("^2[Jeler AC] ^7v9.5 Server System Iniciado (PRODUCCION READY - MODO VISUAL).")
+    print("^2[Jeler AC] ^7v10.0 Server System Iniciado (OPTIMIZED & SECURE).")
 end)
 
 -- =====================================================
@@ -99,12 +100,11 @@ AddEventHandler('jeler:requestToken', function()
         local token = GenerateSecureToken(src, nonce)
         PlayerSecurity[src] = { token = token, sequence = 0 }
         TriggerClientEvent('jeler:setToken', src, token)
-        -- El Heartbeat ya debió iniciarse en playerJoining, pero actualizamos por seguridad
         LastHeartbeat[src] = os.time()
     end
 end)
 
--- ADD SUSPICION (MODO VISUAL ACTIVADO)
+-- ADD SUSPICION (MODO VISUAL)
 function AddSuspicion(source, points, reason)
     if not PlayerSuspicion[source] then PlayerSuspicion[source] = 0.0 end
     PlayerSuspicion[source] = PlayerSuspicion[source] + points
@@ -115,7 +115,7 @@ function AddSuspicion(source, points, reason)
 
     if PlayerSuspicion[source] >= Config.BanThreshold then
         print("^2[TEST MODE] ^7Detección VALIDADA en ID "..source.." ("..reason.."). Enviando UI...")
-        -- En Producción, descomenta DropPlayer y comenta TriggerClientEvent
+        -- PRODUCCIÓN: Descomenta DropPlayer y comenta TriggerClientEvent
         -- DropPlayer(source, "🛡️ Jeler AC: Detección Confirmada ("..reason..")")
         TriggerClientEvent('jeler:mostrarPantalla', source, reason) 
         PlayerSuspicion[source] = 0 
@@ -144,7 +144,7 @@ AddEventHandler('entityCreating', function(entity)
     local src = NetworkGetEntityOwner(entity)
     if not src then return end
     
-    -- [FIX] Ignorar tráfico y mapa (Population Type 1-5)
+    -- Ignorar tráfico y mapa (Population Type 1-5)
     local popType = GetEntityPopulationType(entity)
     if popType > 0 and popType < 6 then return end 
 
@@ -154,7 +154,7 @@ AddEventHandler('entityCreating', function(entity)
         SpamCheck[src] = { veh = 0, ped = 0, obj = 0, time = os.time() }
     end
 
-    local type = GetEntityType(entity) -- 1: Ped, 2: Veh, 3: Obj
+    local type = GetEntityType(entity)
     local count = SpamCheck[src]
     local limit = 20
     local label = "Entity Spam"
@@ -274,7 +274,6 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
         end
     end)
     
-    -- Silent Aim Math
     local wConfig = Config.WeaponClasses[wClass]
     local ping = GetPlayerPing(sender)
     local tolerance = wConfig.tolerance
@@ -359,9 +358,6 @@ Citizen.CreateThread(function()
             local src = tonumber(playerId)
             if LastHeartbeat[src] then
                 local timeSinceLast = now - LastHeartbeat[src]
-                
-                -- SI YA ESTÁ JUGANDO (Tiene Token) -> 60s
-                -- SI ESTÁ CARGANDO (No tiene Token) -> 300s
                 local limit = PlayerSecurity[src] and Config.HeartbeatTimeout or Config.LoginTimeout
                 
                 if timeSinceLast > limit then
@@ -379,7 +375,19 @@ Citizen.CreateThread(function()
 end)
 
 AddEventHandler('onResourceStart', function(res) if GetCurrentResourceName() == res then isAuthenticated = true end end)
-AddEventHandler('playerDropped', function() LastHeartbeat[source] = nil; PlayerSecurity[source] = nil; PlayerRotations[source] = nil end)
+
+-- [OPTIMIZACIÓN] LIMPIEZA DE MEMORIA AL SALIR
+AddEventHandler('playerDropped', function() 
+    local src = source
+    LastHeartbeat[src] = nil
+    PlayerSecurity[src] = nil
+    PlayerRotations[src] = nil
+    PlayerSuspicion[src] = nil
+    PlayerStats[src] = nil
+    EntityRates[src] = nil
+    ExplosionRates[src] = nil
+    SpamGuard[src] = nil
+end)
 
 function RewardLegitShot(source)
     if PlayerSuspicion[source] and PlayerSuspicion[source] > 0 then PlayerSuspicion[source] = math.max(0, PlayerSuspicion[source] - Config.LegitReward) end
@@ -407,6 +415,12 @@ end)
 RegisterNetEvent('jeler:heartbeat')
 AddEventHandler('jeler:heartbeat', function(token, seq, clientResCount)
     local src = source
+    
+    -- [OPTIMIZACIÓN] RATE LIMIT PARA EL HEARTBEAT
+    if not SpamGuard[src] then SpamGuard[src] = 0 end
+    if os.clock() - SpamGuard[src] < 1.0 then return end -- Si manda más de 1/seg, ignorar
+    SpamGuard[src] = os.clock()
+
     if not ValidateToken(src, token, seq) then return end
     LastHeartbeat[src] = os.time()
     

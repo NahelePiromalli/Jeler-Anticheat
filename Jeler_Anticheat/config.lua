@@ -14,7 +14,6 @@ Config.BlacklistedWeapons = {
 Config.BlacklistAction = "ban" -- Opciones: "ban" o "delete"
 
 -- [3] BYPASS VEHÍCULOS (WHITELIST)
--- Agrega aquí tus autos custom rápidos para que no detecte Speedhack
 Config.WhitelistedVehicles = {
     "police", "cargoplane", "volaticus", "deluxo", 
     "ferrari488", "supra_mk4", "gtr_r35"
