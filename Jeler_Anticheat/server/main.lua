@@ -35,32 +35,36 @@ Citizen.CreateThread(function()
     if Config.WhitelistedVehicles then
         for _, v in pairs(Config.WhitelistedVehicles) do WhitelistedVehHashes[GetHashKey(v)] = true end
     end
-    print("^2[Jeler AC] ^7v9.0.0 Server System Iniciado (ANTI-CRASH ACTIVO - MODO VISUAL).")
+    print("^2[Jeler AC] ^7v9.5 Server System Iniciado (PRODUCCION READY - MODO VISUAL).")
 end)
 
--- TOKEN GENERATOR
+-- =====================================================
+-- GENERADOR DE TOKEN OPACO (INDESCIFRABLE)
+-- =====================================================
+local Charset = {}
+for i = 48,  57 do table.insert(Charset, string.char(i)) end
+for i = 65,  90 do table.insert(Charset, string.char(i)) end
+for i = 97, 122 do table.insert(Charset, string.char(i)) end
+
 local function GenerateSecureToken(src, nonce)
-    local time = os.time()
-    local clock = os.clock() * 1000 
-    local salt = math.random(100000, 999999)
-    local rawString = string.format("%s:%s:%s:%s:%s", src, time, clock, nonce, salt)
-    local hash = ""
-    for i = 1, #rawString do
-        local byte = string.byte(rawString, i)
-        hash = hash .. string.format("%02x", byte ~ 0xAB)
+    local length = 64
+    local token = ""
+    math.randomseed(os.time() + (os.clock() * 100000) + src + (nonce or 0))
+    for i = 1, length do
+        token = token .. Charset[math.random(1, #Charset)]
     end
-    return hash
+    return token
 end
 
--- VALIDATOR (MODIFICADO: NO KICKEA SI FALLA)
+-- VALIDATOR
 local function ValidateToken(src, receivedToken, receivedSeq)
     local data = PlayerSecurity[src]
     if not data then 
-        print("^3[Jeler AC] Advertencia: ID "..src.." sin sesión (No kickeado por Test Mode)") 
+        print("^3[Jeler AC] Advertencia: ID "..src.." sin sesión.") 
         return false 
     end
     if data.token ~= receivedToken then 
-        print("^3[Jeler AC] Advertencia: ID "..src.." token inválido (No kickeado por Test Mode)") 
+        print("^3[Jeler AC] Advertencia: ID "..src.." token inválido.") 
         return false 
     end
     if receivedSeq then
@@ -95,11 +99,12 @@ AddEventHandler('jeler:requestToken', function()
         local token = GenerateSecureToken(src, nonce)
         PlayerSecurity[src] = { token = token, sequence = 0 }
         TriggerClientEvent('jeler:setToken', src, token)
+        -- El Heartbeat ya debió iniciarse en playerJoining, pero actualizamos por seguridad
         LastHeartbeat[src] = os.time()
     end
 end)
 
--- ADD SUSPICION (MODIFICADO: MUESTRA PANTALLA EN VEZ DE BANEAR)
+-- ADD SUSPICION (MODO VISUAL ACTIVADO)
 function AddSuspicion(source, points, reason)
     if not PlayerSuspicion[source] then PlayerSuspicion[source] = 0.0 end
     PlayerSuspicion[source] = PlayerSuspicion[source] + points
@@ -110,47 +115,41 @@ function AddSuspicion(source, points, reason)
 
     if PlayerSuspicion[source] >= Config.BanThreshold then
         print("^2[TEST MODE] ^7Detección VALIDADA en ID "..source.." ("..reason.."). Enviando UI...")
-        
-        -- ENVÍO DE PANTALLA (SIN BAN)
+        -- En Producción, descomenta DropPlayer y comenta TriggerClientEvent
+        -- DropPlayer(source, "🛡️ Jeler AC: Detección Confirmada ("..reason..")")
         TriggerClientEvent('jeler:mostrarPantalla', source, reason) 
-        
-        -- Reseteamos sospecha para que puedas seguir probando sin reiniciar
         PlayerSuspicion[source] = 0 
     end
 end
 
--- PROTECCIONES BÁSICAS (HONEYPOTS)
+-- PROTECCIONES BÁSICAS
 local HoneyPotEvents = { "esx:giveInventoryItem", "admin:reviveAll", "bank:transfer", "vrp:addMoney", "anticheat:bypass" }
 for _, eventName in pairs(HoneyPotEvents) do
     RegisterNetEvent(eventName)
     AddEventHandler(eventName, function() 
-        print("^3[HoneyPot] ^7Evento prohibido detectado en ID "..source)
         AddSuspicion(source, 100, "HoneyPot Triggered: "..eventName)
     end)
 end
 
 -- =====================================================
--- [NUEVO] SISTEMA ANTI-CRASH (ENTITY SPAM REWORK)
+-- SISTEMA ANTI-CRASH INTELIGENTE (IGNORA TRÁFICO)
 -- =====================================================
 local SpamCheck = {}
--- Límites internos (Tolerancia alta para evitar falsos positivos por ahora)
-local MaxVehiclesPerSec = 15
-local MaxPedsPerSec = 15
-local MaxObjectsPerSec = 20  -- Props (Objetivo principal de crashers)
+local MaxVehiclesPerSec = 5  
+local MaxPedsPerSec = 5      
+local MaxObjectsPerSec = 10  
 
 AddEventHandler('entityCreating', function(entity)
     if not isAuthenticated then return end
     local src = NetworkGetEntityOwner(entity)
-    
-    -- Si no tiene dueño (es del mapa o población), lo ignoramos
     if not src then return end
     
-    -- Inicializar tabla del jugador si no existe
-    if not SpamCheck[src] then 
-        SpamCheck[src] = { veh = 0, ped = 0, obj = 0, time = os.time() } 
-    end
+    -- [FIX] Ignorar tráfico y mapa (Population Type 1-5)
+    local popType = GetEntityPopulationType(entity)
+    if popType > 0 and popType < 6 then return end 
 
-    -- Resetear contadores cada segundo
+    if not SpamCheck[src] then SpamCheck[src] = { veh = 0, ped = 0, obj = 0, time = os.time() } end
+
     if os.time() > SpamCheck[src].time then
         SpamCheck[src] = { veh = 0, ped = 0, obj = 0, time = os.time() }
     end
@@ -160,39 +159,18 @@ AddEventHandler('entityCreating', function(entity)
     local limit = 20
     local label = "Entity Spam"
 
-    -- Clasificar y contar
-    if type == 1 then 
-        count.ped = count.ped + 1
-        limit = MaxPedsPerSec
-        label = "Ped Spam (Crash Attempt)"
-    elseif type == 2 then 
-        count.veh = count.veh + 1
-        limit = MaxVehiclesPerSec
-        label = "Vehicle Spam (Crash Attempt)"
-    elseif type == 3 then 
-        count.obj = count.obj + 1
-        limit = MaxObjectsPerSec
-        label = "Object/Prop Spam (Crash Attempt)"
+    if type == 1 then count.ped = count.ped + 1; limit = MaxPedsPerSec; label = "Ped Spam"
+    elseif type == 2 then count.veh = count.veh + 1; limit = MaxVehiclesPerSec; label = "Vehicle Spam"
+    elseif type == 3 then count.obj = count.obj + 1; limit = MaxObjectsPerSec; label = "Prop Spam"
     end
 
-    -- VERIFICAR SI SE PASÓ DEL LÍMITE
     if (type == 1 and count.ped > limit) or (type == 2 and count.veh > limit) or (type == 3 and count.obj > limit) then
-        
-        -- 1. CANCELAR EL SPAWN (Lo más importante, evita el crash)
         CancelEvent()
-        
-        -- 2. ALERTAR Y MOSTRAR PANTALLA (Con un pequeño margen extra)
-        if (type == 1 and count.ped > (limit + 5)) or 
-           (type == 2 and count.veh > (limit + 5)) or 
-           (type == 3 and count.obj > (limit + 10)) then
-            
-            print("^1[ANTI-CRASH] ^7Bloqueado spawn masivo de ID: " .. src .. " ("..label..")")
-            TriggerClientEvent('jeler:mostrarPantalla', src, label)
-        end
-        return -- Salimos para no procesar el resto
+        print("^1[ANTI-CRASH] ^7Bloqueado spawn de ID: " .. src .. " ("..label..")")
+        TriggerClientEvent('jeler:mostrarPantalla', src, label)
+        return 
     end
     
-    -- VALIDAR MODELOS PROHIBIDOS (Props glitcheados)
     local model = GetEntityModel(entity)
     for _, blockedModel in ipairs(Config.BlacklistedEntities) do
         if model == GetHashKey(blockedModel) then 
@@ -203,46 +181,30 @@ AddEventHandler('entityCreating', function(entity)
     end
 end)
 
--- Limpieza periódica de tablas de spam para ahorrar memoria
-Citizen.CreateThread(function() 
-    while true do 
-        Citizen.Wait(60000) 
-        SpamCheck = {} 
-    end 
-end)
+Citizen.CreateThread(function() while true do Citizen.Wait(60000); SpamCheck = {} end end)
 
--- =====================================================
--- [NUEVO] ANTI-EXPLOSION SPAM
--- =====================================================
+-- ANTI-EXPLOSION SPAM
 local ExplosionRates = {}
 local MaxExplosionsPerSec = 5
 
 AddEventHandler('explosionEvent', function(sender, ev)
     if not sender then CancelEvent(); return end
     
-    -- 1. CHECK DE TIPOS PROHIBIDOS
     for _, type in ipairs(Config.BlacklistedExplosions) do
         if ev.explosionType == type then 
             CancelEvent() 
-            print("^1[ANTI-CRASH] ^7Explosión prohibida bloqueada de ID: " .. sender)
             AddSuspicion(sender, 100, "Illegal Explosion Type: "..type)
             return 
         end
     end
 
-    -- 2. RATE LIMIT (Evitar ametralladora de explosiones)
     if not ExplosionRates[sender] then ExplosionRates[sender] = { count = 0, time = os.time() } end
-    
-    if os.time() > ExplosionRates[sender].time then
-        ExplosionRates[sender] = { count = 0, time = os.time() }
-    end
+    if os.time() > ExplosionRates[sender].time then ExplosionRates[sender] = { count = 0, time = os.time() } end
     
     ExplosionRates[sender].count = ExplosionRates[sender].count + 1
-    
     if ExplosionRates[sender].count > MaxExplosionsPerSec then
-        CancelEvent() -- Anula el daño y efecto visual
+        CancelEvent() 
         if ExplosionRates[sender].count > (MaxExplosionsPerSec + 2) then
-             print("^1[ANTI-CRASH] ^7Spam de explosiones bloqueado de ID: " .. sender)
              TriggerClientEvent('jeler:mostrarPantalla', sender, "Explosion Spam Detected")
         end
     end
@@ -253,7 +215,6 @@ AddEventHandler('executeCommand', function(commandSource, command)
     local cmd = string.lower(command)
     for _, blockedCmd in ipairs(Config.BlacklistedCommands) do
         if string.find(cmd, blockedCmd) then
-            -- if IsPlayerAceAllowed(commandSource, "jeler.bypass") then return end -- <-- COMENTADO BYPASS DE ADMIN
             CancelEvent()
             AddSuspicion(commandSource, 100, "Illegal Command Injection")
             return
@@ -262,7 +223,7 @@ AddEventHandler('executeCommand', function(commandSource, command)
 end)
 
 -- =============================================================================
--- HEURÍSTICA DE COMBATE AVANZADA (V7)
+-- HEURÍSTICA DE COMBATE
 -- =============================================================================
 AddEventHandler('weaponDamageEvent', function(sender, data)
     if not isAuthenticated then return end
@@ -273,7 +234,6 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
     if not DoesEntityExist(victimPed) or not IsPedAPlayer(victimPed) then return end
     if data.weaponDamage <= 0 then return end
 
-    -- [1] DAMAGE DESYNC CHECK
     local serverCoords = GetEntityCoords(shooter)
     local clientReportedCoords = PlayerPositions[sender] or serverCoords 
     local desyncDist = #(serverCoords - clientReportedCoords)
@@ -284,20 +244,15 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
         end
     end
 
-    -- [2] SNAP DETECTION
     local currentRot = GetEntityRotation(shooter, 2)
     if PlayerRotations[sender] then
         local prevRot = PlayerRotations[sender]
         local deltaYaw = math.abs(currentRot.z - prevRot.z)
         if deltaYaw > 180 then deltaYaw = 360 - deltaYaw end
-        
-        if deltaYaw > Config.MaxRotationSpeed then
-            AddSuspicion(sender, 35, "Snap Aim (Flick: "..math.floor(deltaYaw).."°)")
-        end
+        if deltaYaw > Config.MaxRotationSpeed then AddSuspicion(sender, 35, "Snap Aim") end
     end
     PlayerRotations[sender] = currentRot
 
-    -- [3] CHEQUEOS EXISTENTES
     local damageLimit = 250
     local weaponHash = GetSelectedPedWeapon(shooter)
     local wClass = WeaponGroups[weaponHash] or 'default'
@@ -309,7 +264,6 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
     SetTimeout(150, function()
         if not DoesEntityExist(victimPed) then return end
         if healthBefore == GetEntityHealth(victimPed) and armorBefore == GetPedArmour(victimPed) then
-             -- if not IsEntityDead(victimPed) then -- <-- BYPASS COMENTADO PARA TEST
              if not IsEntityDead(victimPed) then 
                 if not GodmodeStrikes[victimId] then GodmodeStrikes[victimId] = 0 end
                 GodmodeStrikes[victimId] = GodmodeStrikes[victimId] + 1
@@ -364,10 +318,9 @@ Citizen.CreateThread(function()
         if isAuthenticated then
             for _, playerId in ipairs(GetPlayers()) do
                 local ped = GetPlayerPed(playerId)
-                -- if DoesEntityExist(ped) and not IsPlayerAceAllowed(playerId, "jeler.bypass") then <-- BYPASS COMENTADO
                 if DoesEntityExist(ped) then 
                     local pos = GetEntityCoords(ped)
-                    PlayerPositions[playerId] = pos -- Guardar posición para Desync Check
+                    PlayerPositions[playerId] = pos 
 
                     local vehicle = GetVehiclePedIsIn(ped, false)
                     local isInVehicle = (vehicle ~= 0)
@@ -375,16 +328,12 @@ Citizen.CreateThread(function()
                     if isInVehicle then
                         model = GetEntityModel(vehicle)
                         if BlacklistedVehHashes[model] then
-                            -- if Config.BlacklistAction == "ban" then AddSuspicion(playerId, 100, "Vehículo Prohibido")
-                            -- elseif Config.BlacklistAction == "delete" then DeleteEntity(vehicle) end
                             DeleteEntity(vehicle)
                             TriggerClientEvent('jeler:mostrarPantalla', playerId, "Vehículo Prohibido")
                         end
                     end
                     local weaponHash = GetSelectedPedWeapon(ped)
                     if weaponHash ~= -1569615261 and BlacklistedWepHashes[weaponHash] then
-                        -- if Config.BlacklistAction == "ban" then AddSuspicion(playerId, 100, "Arma Prohibida")
-                        -- elseif Config.BlacklistAction == "delete" then RemoveWeaponFromPed(ped, weaponHash) end
                         RemoveWeaponFromPed(ped, weaponHash)
                         TriggerClientEvent('jeler:mostrarPantalla', playerId, "Arma Prohibida")
                     end
@@ -394,16 +343,35 @@ Citizen.CreateThread(function()
     end
 end)
 
--- WATCHDOG (MODIFICADO: NO KICKEA)
+-- =====================================================
+-- WATCHDOG INTELIGENTE (ANTI-STOP RESOURCE)
+-- =====================================================
+AddEventHandler('playerJoining', function()
+    local src = source
+    LastHeartbeat[src] = os.time() -- Inicia reloj de carga (5 min)
+end)
+
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(10000)
         local now = os.time()
         for _, playerId in ipairs(GetPlayers()) do
-            if LastHeartbeat[playerId] then
-                if (now - LastHeartbeat[playerId]) > Config.HeartbeatTimeout then
-                    -- DropPlayer(playerId, "🛡️ Jeler AC: Security Resource Stopped") <-- DESACTIVADO
-                    print("^3[WATCHDOG] ^7ID "..playerId.." timeout (Ignorado por Modo Prueba).")
+            local src = tonumber(playerId)
+            if LastHeartbeat[src] then
+                local timeSinceLast = now - LastHeartbeat[src]
+                
+                -- SI YA ESTÁ JUGANDO (Tiene Token) -> 60s
+                -- SI ESTÁ CARGANDO (No tiene Token) -> 300s
+                local limit = PlayerSecurity[src] and Config.HeartbeatTimeout or Config.LoginTimeout
+                
+                if timeSinceLast > limit then
+                    if PlayerSecurity[src] then
+                        print("^1[WATCHDOG] ^7ID "..src.." resource stopped (Jugando).")
+                        -- DropPlayer(src, "🛡️ Jeler AC: Security Resource Stopped")
+                    else
+                        print("^3[WATCHDOG] ^7ID "..src.." timeout (Cargando).")
+                        -- DropPlayer(src, "🛡️ Jeler AC: Connection Timeout")
+                    end
                 end
             end
         end
@@ -436,7 +404,6 @@ AddEventHandler('jeler:flag', function(token, reason)
     AddSuspicion(src, 100, "Client Flag: " .. reason)
 end)
 
--- [4] RESOURCE INJECTION CHECK
 RegisterNetEvent('jeler:heartbeat')
 AddEventHandler('jeler:heartbeat', function(token, seq, clientResCount)
     local src = source
@@ -445,6 +412,6 @@ AddEventHandler('jeler:heartbeat', function(token, seq, clientResCount)
     
     local serverResCount = GetNumResources()
     if clientResCount and (clientResCount > serverResCount + 2) then
-        AddSuspicion(src, 100, "Resource Injection (Lua Executor Detected)")
+        AddSuspicion(src, 100, "Resource Injection")
     end
 end)

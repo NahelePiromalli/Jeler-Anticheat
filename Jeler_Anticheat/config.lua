@@ -2,7 +2,7 @@ Config = {}
 
 -- [1] LICENCIA Y DEBUG
 Config.LicenseKey = "TEST-DEV-KEY" 
-Config.DebugMode = true 
+Config.DebugMode = true -- Ponlo en 'false' cuando lo subas al VPS real
 
 -- [2] LISTAS NEGRAS (VEHÍCULOS Y ARMAS)
 Config.BlacklistedVehicles = {
@@ -11,9 +11,10 @@ Config.BlacklistedVehicles = {
 Config.BlacklistedWeapons = {
     "WEAPON_RPG", "WEAPON_MINIGUN", "WEAPON_RAILGUN", "WEAPON_GARBAGEBAG", "WEAPON_HOMINGLAUNCHER"
 }
-Config.BlacklistAction = "ban" 
+Config.BlacklistAction = "ban" -- Opciones: "ban" o "delete"
 
 -- [3] BYPASS VEHÍCULOS (WHITELIST)
+-- Agrega aquí tus autos custom rápidos para que no detecte Speedhack
 Config.WhitelistedVehicles = {
     "police", "cargoplane", "volaticus", "deluxo", 
     "ferrari488", "supra_mk4", "gtr_r35"
@@ -23,7 +24,7 @@ Config.WhitelistedVehicles = {
 Config.NoclipCheckInterval = 2000 
 Config.MaxRunSpeed = 12.0 
 Config.MaxFlyHeight = 10.0 
-Config.MaxVehicleSpeed = 60.0 
+Config.MaxVehicleSpeed = 60.0 -- Metros por segundo
 Config.MaxWalkSpeed = 3.5 
 Config.MaxSprintSpeed = 7.5 
 
@@ -51,8 +52,9 @@ Config.MaxEntitiesPerSecond = 10
 Config.BlacklistedEntities = { "prop_windmill_01", "p_spinning_anus_s", "cargoplane", "blimp" }
 Config.BlacklistedExplosions = { 29, 30, 31, 32 }
 
--- [8] ANTI-STOP RESOURCE
-Config.HeartbeatTimeout = 60 
+-- [8] ANTI-STOP RESOURCE (TIEMPOS)
+Config.HeartbeatTimeout = 60    -- Tiempo límite al JUGAR (Estricto)
+Config.LoginTimeout = 300       -- Tiempo límite al ENTRAR/CARGAR (5 minutos)
 
 -- [9] DETECTOR DE TECLAS
 Config.BlacklistedKeys = {
@@ -66,19 +68,16 @@ Config.BlacklistedCommands = {
     "god", "noclip", "givemoney", "giveitem", "setjob", "esx:giveaccountmoney", "unban", "bring", "revive"
 }
 
--- [17] SEGURIDAD DE TOKEN
+-- [11] SEGURIDAD DE TOKEN
 Config.TokenRotationInterval = 300 
 
--- [18] DETECCIÓN DE INYECTORES (GLOBAL SCAN) - NUEVO
--- Variables que los menús dejan en memoria
+-- [12] DETECCIÓN DE INYECTORES (GLOBAL SCAN)
 Config.BlacklistedGlobals = {
     "Eulen", "Skript", "Lynx", "Ham", "Murtaza", "Fallout", "Tiago", "Brutan", "Fallen", "RedENGINE"
 }
 
--- [19] SNAP DETECTION (AIMBOT/TRIGGERBOT) - NUEVO
--- Giro máximo permitido entre disparos (Grados)
+-- [13] SNAP DETECTION (AIMBOT/TRIGGERBOT)
 Config.MaxRotationSpeed = 85.0 
 
--- [20] DAMAGE DESYNC - NUEVO
--- Distancia máxima (metros) entre posición real y posición de disparo
+-- [14] DAMAGE DESYNC
 Config.MaxDesyncDistance = 4.5
