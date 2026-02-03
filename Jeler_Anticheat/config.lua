@@ -1,8 +1,8 @@
 Config = {}
 
--- [1] LICENCIA Y DEBUG
-Config.LicenseKey = "TEST-DEV-KEY" 
-Config.DebugMode = true -- Ponlo en 'false' en VPS real
+-- [1] LICENCIA Y MODO PRODUCCIÓN
+Config.LicenseKey = "JELER-LICENSE-KEY" 
+Config.DebugMode = false -- [IMPORTANTE] false = BANEOS ACTIVOS y consola limpia.
 
 -- [2] LISTAS NEGRAS (VEHÍCULOS Y ARMAS)
 Config.BlacklistedVehicles = {
@@ -37,7 +37,7 @@ Config.WeaponClasses = {
 Config.MaxHitboxRadius = 0.25 
 
 -- [6] SISTEMA DE INTEGRIDAD
-Config.BanThreshold = 100.0 
+Config.BanThreshold = 100.0 -- Puntos necesarios para banear
 Config.LegitReward = 3.0    
 Config.AnalysisWindow = 20
 Config.MinBoneVariety = 3 
@@ -51,9 +51,9 @@ Config.MaxEntitiesPerSecond = 10
 Config.BlacklistedEntities = { "prop_windmill_01", "p_spinning_anus_s", "cargoplane", "blimp" }
 Config.BlacklistedExplosions = { 29, 30, 31, 32 }
 
--- [8] ANTI-STOP RESOURCE (TIEMPOS)
-Config.HeartbeatTimeout = 60    -- Tiempo límite al JUGAR (Estricto)
-Config.LoginTimeout = 300       -- Tiempo límite al ENTRAR/CARGAR (5 minutos)
+-- [8] ANTI-STOP RESOURCE
+Config.HeartbeatTimeout = 60    -- Tiempo límite Jugando
+Config.LoginTimeout = 300       -- Tiempo límite Cargando
 
 -- [9] DETECTOR DE TECLAS
 Config.BlacklistedKeys = {
@@ -75,7 +75,7 @@ Config.BlacklistedGlobals = {
     "Eulen", "Skript", "Lynx", "Ham", "Murtaza", "Fallout", "Tiago", "Brutan", "Fallen", "RedENGINE"
 }
 
--- [13] SNAP DETECTION (AIMBOT/TRIGGERBOT)
+-- [13] SNAP DETECTION
 Config.MaxRotationSpeed = 85.0 
 
 -- [14] DAMAGE DESYNC

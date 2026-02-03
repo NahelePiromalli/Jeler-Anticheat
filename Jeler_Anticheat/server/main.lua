@@ -32,7 +32,7 @@ Citizen.CreateThread(function()
     if Config.WhitelistedVehicles then
         for _, v in pairs(Config.WhitelistedVehicles) do WhitelistedVehHashes[GetHashKey(v)] = true end
     end
-    print("^2[Jeler AC] ^7v13.5 System Ready (SMART UNBAN + HWID).")
+    print("^2[Jeler AC] ^7v14.0 PRODUCCIÓN (BANEO ACTIVO + HWID).")
 end)
 
 -- =====================================================
@@ -71,7 +71,8 @@ local function BanPlayer(src, reason)
     SaveResourceFile(GetCurrentResourceName(), "bans.json", json.encode(BanList, { indent = true }), -1)
     
     print("^1[BAN] ^7HWID BANEADO: " .. GetPlayerName(src))
-    DropPlayer(src, "⛔ Jeler AC: You Have Been Banned (" .. reason .. ")")
+    -- ESTA LÍNEA ES LA QUE EXPULSA AL JUGADOR
+    DropPlayer(src, "⛔ Jeler AC: HAS SIDO BANEADO PERMANENTEMENTE (" .. reason .. ")")
 end
 
 -- Bloquear entrada (Check Completo)
@@ -121,14 +122,10 @@ AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
 end)
 
 -- =====================================================
--- [NUEVO] COMANDO UNBAN INTELIGENTE (DISCORD SUPPORT)
--- Uso: /jeler_unban [ID]
--- Ejemplo: /jeler_unban discord:12345... o solo /jeler_unban 12345...
+-- COMANDO UNBAN INTELIGENTE (DISCORD SUPPORT)
 -- =====================================================
 RegisterCommand("jeler_unban", function(source, args, rawCommand)
     local src = source
-    
-    -- Verificar permisos (Consola o Admin)
     if src ~= 0 then
         if not IsPlayerAceAllowed(src, "jeler.admin") then 
             print("^1[ACCESO DENEGADO] ^7No tienes permiso.")
@@ -142,8 +139,6 @@ RegisterCommand("jeler_unban", function(source, args, rawCommand)
         return 
     end
 
-    -- DETECCIÓN INTELIGENTE DE DISCORD
-    -- Si el admin pone solo números (ej: 8234723...), asumimos que es Discord
     if string.match(target, "^%d+$") then
         target = "discord:" .. target
         print("^3[INFO] ^7Detectado ID numérico, buscando como: " .. target)
@@ -154,15 +149,10 @@ RegisterCommand("jeler_unban", function(source, args, rawCommand)
 
     for _, ban in ipairs(BanList) do
         local match = false
-        -- Buscamos si el ID que pasaste coincide con ALGUNO de los IDs del baneado
         for _, id in ipairs(ban.ids) do
-            if id == target then 
-                match = true 
-                break 
-            end
+            if id == target then match = true break end
         end
         
-        -- Si NO coincide, lo mantenemos en la lista. Si coincide, NO lo guardamos (se borra).
         if not match then
             table.insert(newBanList, ban)
         else
@@ -249,10 +239,13 @@ function AddSuspicion(source, points, reason)
     if not PlayerSuspicion[source] then PlayerSuspicion[source] = 0.0 end
     PlayerSuspicion[source] = PlayerSuspicion[source] + points
     
+    -- Si el DebugMode estuviera en TRUE, solo imprimiría esto.
+    -- Como ahora está en FALSE, pasará directo a la lógica de abajo sin avisar.
     if Config.DebugMode then
         print(string.format("^3[ANALYSIS] ^7ID:%s | +%.1f pts | Total: %.1f/%d | Razón: %s", source, points, PlayerSuspicion[source], Config.BanThreshold, reason))
     end
 
+    -- LOGICA DE BANEO: Si supera el límite (100), BANEA
     if PlayerSuspicion[source] >= Config.BanThreshold then
         BanPlayer(source, reason) 
         PlayerSuspicion[source] = 0 
