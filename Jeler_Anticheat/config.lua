@@ -2,7 +2,7 @@ Config = {}
 
 -- [1] LICENCIA Y DEBUG
 Config.LicenseKey = "TEST-DEV-KEY" 
-Config.DebugMode = true -- Ponlo en 'false' cuando lo subas al VPS real
+Config.DebugMode = true -- Ponlo en 'false' en VPS real
 
 -- [2] LISTAS NEGRAS (VEHÍCULOS Y ARMAS)
 Config.BlacklistedVehicles = {
@@ -11,7 +11,7 @@ Config.BlacklistedVehicles = {
 Config.BlacklistedWeapons = {
     "WEAPON_RPG", "WEAPON_MINIGUN", "WEAPON_RAILGUN", "WEAPON_GARBAGEBAG", "WEAPON_HOMINGLAUNCHER"
 }
-Config.BlacklistAction = "ban" -- Opciones: "ban" o "delete"
+Config.BlacklistAction = "ban" 
 
 -- [3] BYPASS VEHÍCULOS (WHITELIST)
 Config.WhitelistedVehicles = {
@@ -23,7 +23,7 @@ Config.WhitelistedVehicles = {
 Config.NoclipCheckInterval = 2000 
 Config.MaxRunSpeed = 12.0 
 Config.MaxFlyHeight = 10.0 
-Config.MaxVehicleSpeed = 60.0 -- Metros por segundo
+Config.MaxVehicleSpeed = 60.0 
 Config.MaxWalkSpeed = 3.5 
 Config.MaxSprintSpeed = 7.5 
 

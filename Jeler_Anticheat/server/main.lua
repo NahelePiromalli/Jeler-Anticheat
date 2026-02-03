@@ -5,15 +5,11 @@ local PlayerPositions = {}
 local GodmodeStrikes = {}  
 local EntityRates = {}     
 local LastHeartbeat = {} 
-local SpamGuard = {} -- [OPTIMIZACIÓN] Anti-Spam de eventos
+local SpamGuard = {} 
 
--- NUEVO: Historial de Rotación para Snap Check
 local PlayerRotations = {} 
-
--- SISTEMA DE SEGURIDAD STATEFUL
 local PlayerSecurity = {} 
 
--- CACHÉ
 local BlacklistedVehHashes = {}
 local BlacklistedWepHashes = {}
 local WhitelistedVehHashes = {}
@@ -36,12 +32,166 @@ Citizen.CreateThread(function()
     if Config.WhitelistedVehicles then
         for _, v in pairs(Config.WhitelistedVehicles) do WhitelistedVehHashes[GetHashKey(v)] = true end
     end
-    print("^2[Jeler AC] ^7v10.0 Server System Iniciado (OPTIMIZED & SECURE).")
+    print("^2[Jeler AC] ^7v13.5 System Ready (SMART UNBAN + HWID).")
 end)
 
 -- =====================================================
--- GENERADOR DE TOKEN OPACO (INDESCIFRABLE)
+-- SISTEMA DE BANEOS (PERSISTENCIA JSON + HWID)
 -- =====================================================
+local BanList = {}
+
+-- Cargar baneos al iniciar
+Citizen.CreateThread(function()
+    local loadFile = LoadResourceFile(GetCurrentResourceName(), "bans.json")
+    if loadFile then
+        BanList = json.decode(loadFile)
+    else
+        SaveResourceFile(GetCurrentResourceName(), "bans.json", "[]", -1)
+    end
+    print("^2[Jeler AC] ^7Ban List Cargada: " .. #BanList .. " usuarios baneados.")
+end)
+
+local function BanPlayer(src, reason)
+    local ids = GetPlayerIdentifiers(src)
+    local tokens = {}
+    local numTokens = GetNumPlayerTokens(src)
+    for i = 0, numTokens - 1 do
+        table.insert(tokens, GetPlayerToken(src, i))
+    end
+
+    local banData = {
+        ids = ids,
+        tokens = tokens, 
+        reason = reason,
+        date = os.date("%d/%m/%Y %H:%M"),
+        name = GetPlayerName(src)
+    }
+    
+    table.insert(BanList, banData)
+    SaveResourceFile(GetCurrentResourceName(), "bans.json", json.encode(BanList, { indent = true }), -1)
+    
+    print("^1[BAN] ^7HWID BANEADO: " .. GetPlayerName(src))
+    DropPlayer(src, "⛔ Jeler AC: You Have Been Banned (" .. reason .. ")")
+end
+
+-- Bloquear entrada (Check Completo)
+AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
+    local src = source
+    local ids = GetPlayerIdentifiers(src)
+    local myTokens = {}
+    local numTokens = GetNumPlayerTokens(src)
+    for i = 0, numTokens - 1 do
+        table.insert(myTokens, GetPlayerToken(src, i))
+    end
+    
+    deferrals.defer()
+    Wait(50) 
+    
+    for _, ban in ipairs(BanList) do
+        local banned = false
+        -- Check ID (Steam, Discord, Licencia)
+        for _, bannedId in ipairs(ban.ids) do
+            for _, myId in ipairs(ids) do
+                if bannedId == myId then banned = true break end
+            end
+            if banned then break end
+        end
+        
+        -- Check HWID (Token PC)
+        if not banned and ban.tokens then
+            for _, bannedToken in ipairs(ban.tokens) do
+                for _, myToken in ipairs(myTokens) do
+                    if bannedToken == myToken then
+                        banned = true
+                        print("^3[Jeler AC] ^7Evasión detectada (HWID): " .. name)
+                        break
+                    end
+                end
+                if banned then break end
+            end
+        end
+
+        if banned then
+            deferrals.done("⛔ Jeler AC: BANEADO POR HARDWARE. Razón: " .. ban.reason .. " (Fecha: " .. ban.date .. ")")
+            return
+        end
+    end
+    
+    deferrals.done()
+end)
+
+-- =====================================================
+-- [NUEVO] COMANDO UNBAN INTELIGENTE (DISCORD SUPPORT)
+-- Uso: /jeler_unban [ID]
+-- Ejemplo: /jeler_unban discord:12345... o solo /jeler_unban 12345...
+-- =====================================================
+RegisterCommand("jeler_unban", function(source, args, rawCommand)
+    local src = source
+    
+    -- Verificar permisos (Consola o Admin)
+    if src ~= 0 then
+        if not IsPlayerAceAllowed(src, "jeler.admin") then 
+            print("^1[ACCESO DENEGADO] ^7No tienes permiso.")
+            return 
+        end
+    end
+
+    local target = args[1]
+    if not target then 
+        print("^3[USO] ^7/jeler_unban [steam:xx / license:xx / discord:xx]") 
+        return 
+    end
+
+    -- DETECCIÓN INTELIGENTE DE DISCORD
+    -- Si el admin pone solo números (ej: 8234723...), asumimos que es Discord
+    if string.match(target, "^%d+$") then
+        target = "discord:" .. target
+        print("^3[INFO] ^7Detectado ID numérico, buscando como: " .. target)
+    end
+
+    local newBanList = {}
+    local found = false
+
+    for _, ban in ipairs(BanList) do
+        local match = false
+        -- Buscamos si el ID que pasaste coincide con ALGUNO de los IDs del baneado
+        for _, id in ipairs(ban.ids) do
+            if id == target then 
+                match = true 
+                break 
+            end
+        end
+        
+        -- Si NO coincide, lo mantenemos en la lista. Si coincide, NO lo guardamos (se borra).
+        if not match then
+            table.insert(newBanList, ban)
+        else
+            found = true
+            print("^2[Jeler AC] ^7Baneo ELIMINADO para: " .. (ban.name or "Desconocido"))
+        end
+    end
+
+    if found then
+        BanList = newBanList
+        SaveResourceFile(GetCurrentResourceName(), "bans.json", json.encode(BanList, { indent = true }), -1)
+        print("^2[ÉXITO] ^7Jugador desbaneado correctamente.")
+    else
+        print("^1[ERROR] ^7No se encontró ningún baneo con ese ID ("..target..").")
+    end
+end, true)
+
+-- =====================================================
+-- SISTEMA DE ENCRIPTACIÓN & TOKENS
+-- =====================================================
+local function XOREncrypt(str, key)
+    local res = {}
+    for i = 1, #str do
+        local keyByte = string.byte(key, (i - 1) % #key + 1)
+        table.insert(res, string.char(string.byte(str, i) ~ keyByte))
+    end
+    return table.concat(res)
+end
+
 local Charset = {}
 for i = 48,  57 do table.insert(Charset, string.char(i)) end
 for i = 65,  90 do table.insert(Charset, string.char(i)) end
@@ -57,17 +207,10 @@ local function GenerateSecureToken(src, nonce)
     return token
 end
 
--- VALIDATOR
 local function ValidateToken(src, receivedToken, receivedSeq)
     local data = PlayerSecurity[src]
-    if not data then 
-        print("^3[Jeler AC] Advertencia: ID "..src.." sin sesión.") 
-        return false 
-    end
-    if data.token ~= receivedToken then 
-        print("^3[Jeler AC] Advertencia: ID "..src.." token inválido.") 
-        return false 
-    end
+    if not data then return false end
+    if data.token ~= receivedToken then return false end
     if receivedSeq then
         if receivedSeq <= data.sequence then return false end
         data.sequence = receivedSeq
@@ -75,7 +218,6 @@ local function ValidateToken(src, receivedToken, receivedSeq)
     return true
 end
 
--- ROTATION THREAD
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(Config.TokenRotationInterval * 1000)
@@ -91,7 +233,6 @@ Citizen.CreateThread(function()
     end
 end)
 
--- REQUEST TOKEN
 RegisterNetEvent('jeler:requestToken')
 AddEventHandler('jeler:requestToken', function()
     local src = source
@@ -104,7 +245,6 @@ AddEventHandler('jeler:requestToken', function()
     end
 end)
 
--- ADD SUSPICION (MODO VISUAL)
 function AddSuspicion(source, points, reason)
     if not PlayerSuspicion[source] then PlayerSuspicion[source] = 0.0 end
     PlayerSuspicion[source] = PlayerSuspicion[source] + points
@@ -114,15 +254,12 @@ function AddSuspicion(source, points, reason)
     end
 
     if PlayerSuspicion[source] >= Config.BanThreshold then
-        print("^2[TEST MODE] ^7Detección VALIDADA en ID "..source.." ("..reason.."). Enviando UI...")
-        -- PRODUCCIÓN: Descomenta DropPlayer y comenta TriggerClientEvent
-        -- DropPlayer(source, "🛡️ Jeler AC: Detección Confirmada ("..reason..")")
-        TriggerClientEvent('jeler:mostrarPantalla', source, reason) 
+        BanPlayer(source, reason) 
         PlayerSuspicion[source] = 0 
     end
 end
 
--- PROTECCIONES BÁSICAS
+-- PROTECCIONES DE EVENTOS
 local HoneyPotEvents = { "esx:giveInventoryItem", "admin:reviveAll", "bank:transfer", "vrp:addMoney", "anticheat:bypass" }
 for _, eventName in pairs(HoneyPotEvents) do
     RegisterNetEvent(eventName)
@@ -131,9 +268,15 @@ for _, eventName in pairs(HoneyPotEvents) do
     end)
 end
 
--- =====================================================
--- SISTEMA ANTI-CRASH INTELIGENTE (IGNORA TRÁFICO)
--- =====================================================
+RegisterNetEvent('jeler:flag')
+AddEventHandler('jeler:flag', function(token, encryptedReason)
+    local src = source
+    if not ValidateToken(src, token) then return end
+    local reason = XOREncrypt(encryptedReason, token)
+    AddSuspicion(src, 100, "Client Flag: " .. reason)
+end)
+
+-- ANTI-CRASH
 local SpamCheck = {}
 local MaxVehiclesPerSec = 5  
 local MaxPedsPerSec = 5      
@@ -144,15 +287,11 @@ AddEventHandler('entityCreating', function(entity)
     local src = NetworkGetEntityOwner(entity)
     if not src then return end
     
-    -- Ignorar tráfico y mapa (Population Type 1-5)
     local popType = GetEntityPopulationType(entity)
     if popType > 0 and popType < 6 then return end 
 
     if not SpamCheck[src] then SpamCheck[src] = { veh = 0, ped = 0, obj = 0, time = os.time() } end
-
-    if os.time() > SpamCheck[src].time then
-        SpamCheck[src] = { veh = 0, ped = 0, obj = 0, time = os.time() }
-    end
+    if os.time() > SpamCheck[src].time then SpamCheck[src] = { veh = 0, ped = 0, obj = 0, time = os.time() } end
 
     local type = GetEntityType(entity)
     local count = SpamCheck[src]
@@ -183,13 +322,12 @@ end)
 
 Citizen.CreateThread(function() while true do Citizen.Wait(60000); SpamCheck = {} end end)
 
--- ANTI-EXPLOSION SPAM
+-- ANTI-EXPLOSION
 local ExplosionRates = {}
 local MaxExplosionsPerSec = 5
 
 AddEventHandler('explosionEvent', function(sender, ev)
     if not sender then CancelEvent(); return end
-    
     for _, type in ipairs(Config.BlacklistedExplosions) do
         if ev.explosionType == type then 
             CancelEvent() 
@@ -197,10 +335,8 @@ AddEventHandler('explosionEvent', function(sender, ev)
             return 
         end
     end
-
     if not ExplosionRates[sender] then ExplosionRates[sender] = { count = 0, time = os.time() } end
     if os.time() > ExplosionRates[sender].time then ExplosionRates[sender] = { count = 0, time = os.time() } end
-    
     ExplosionRates[sender].count = ExplosionRates[sender].count + 1
     if ExplosionRates[sender].count > MaxExplosionsPerSec then
         CancelEvent() 
@@ -222,9 +358,7 @@ AddEventHandler('executeCommand', function(commandSource, command)
     end
 end)
 
--- =============================================================================
 -- HEURÍSTICA DE COMBATE
--- =============================================================================
 AddEventHandler('weaponDamageEvent', function(sender, data)
     if not isAuthenticated then return end
     local victimId = data.hitGlobalId
@@ -310,44 +444,10 @@ AddEventHandler('weaponDamageEvent', function(sender, data)
     end
 end)
 
--- LOOP SEGURIDAD
-Citizen.CreateThread(function()
-    while true do
-        Citizen.Wait(Config.NoclipCheckInterval)
-        if isAuthenticated then
-            for _, playerId in ipairs(GetPlayers()) do
-                local ped = GetPlayerPed(playerId)
-                if DoesEntityExist(ped) then 
-                    local pos = GetEntityCoords(ped)
-                    PlayerPositions[playerId] = pos 
-
-                    local vehicle = GetVehiclePedIsIn(ped, false)
-                    local isInVehicle = (vehicle ~= 0)
-                    local model = 0
-                    if isInVehicle then
-                        model = GetEntityModel(vehicle)
-                        if BlacklistedVehHashes[model] then
-                            DeleteEntity(vehicle)
-                            TriggerClientEvent('jeler:mostrarPantalla', playerId, "Vehículo Prohibido")
-                        end
-                    end
-                    local weaponHash = GetSelectedPedWeapon(ped)
-                    if weaponHash ~= -1569615261 and BlacklistedWepHashes[weaponHash] then
-                        RemoveWeaponFromPed(ped, weaponHash)
-                        TriggerClientEvent('jeler:mostrarPantalla', playerId, "Arma Prohibida")
-                    end
-                end
-            end
-        end
-    end
-end)
-
--- =====================================================
--- WATCHDOG INTELIGENTE (ANTI-STOP RESOURCE)
--- =====================================================
+-- WATCHDOG & LIMPIEZA
 AddEventHandler('playerJoining', function()
     local src = source
-    LastHeartbeat[src] = os.time() -- Inicia reloj de carga (5 min)
+    LastHeartbeat[src] = os.time()
 end)
 
 Citizen.CreateThread(function()
@@ -359,14 +459,13 @@ Citizen.CreateThread(function()
             if LastHeartbeat[src] then
                 local timeSinceLast = now - LastHeartbeat[src]
                 local limit = PlayerSecurity[src] and Config.HeartbeatTimeout or Config.LoginTimeout
-                
                 if timeSinceLast > limit then
                     if PlayerSecurity[src] then
                         print("^1[WATCHDOG] ^7ID "..src.." resource stopped (Jugando).")
-                        -- DropPlayer(src, "🛡️ Jeler AC: Security Resource Stopped")
+                        DropPlayer(src, "🛡️ Jeler AC: Security Resource Stopped")
                     else
                         print("^3[WATCHDOG] ^7ID "..src.." timeout (Cargando).")
-                        -- DropPlayer(src, "🛡️ Jeler AC: Connection Timeout")
+                        DropPlayer(src, "🛡️ Jeler AC: Connection Timeout")
                     end
                 end
             end
@@ -376,7 +475,6 @@ end)
 
 AddEventHandler('onResourceStart', function(res) if GetCurrentResourceName() == res then isAuthenticated = true end end)
 
--- [OPTIMIZACIÓN] LIMPIEZA DE MEMORIA AL SALIR
 AddEventHandler('playerDropped', function() 
     local src = source
     LastHeartbeat[src] = nil
@@ -389,36 +487,11 @@ AddEventHandler('playerDropped', function()
     SpamGuard[src] = nil
 end)
 
-function RewardLegitShot(source)
-    if PlayerSuspicion[source] and PlayerSuspicion[source] > 0 then PlayerSuspicion[source] = math.max(0, PlayerSuspicion[source] - Config.LegitReward) end
-end
-
-function AnalyzeHeuristics(source, stats)
-    local uniqueBones = {}
-    for _, b in pairs(stats.bones) do uniqueBones[b] = true end
-    local count = 0
-    for _ in pairs(uniqueBones) do count = count + 1 end
-    if count < Config.MinBoneVariety then AddSuspicion(source, 35, "Bone Locking (Aimbot)") end
-    
-    local variance = MathUtils.StandardDeviation(stats.angles)
-    local avgAngle = MathUtils.Average(stats.angles)
-    if avgAngle < 1.5 and variance < 0.1 then AddSuspicion(source, 60, "Triggerbot (Zero Variance)") end
-end
-
-RegisterNetEvent('jeler:flag')
-AddEventHandler('jeler:flag', function(token, reason)
-    local src = source
-    if not ValidateToken(src, token) then return end
-    AddSuspicion(src, 100, "Client Flag: " .. reason)
-end)
-
 RegisterNetEvent('jeler:heartbeat')
 AddEventHandler('jeler:heartbeat', function(token, seq, clientResCount)
     local src = source
-    
-    -- [OPTIMIZACIÓN] RATE LIMIT PARA EL HEARTBEAT
     if not SpamGuard[src] then SpamGuard[src] = 0 end
-    if os.clock() - SpamGuard[src] < 1.0 then return end -- Si manda más de 1/seg, ignorar
+    if os.clock() - SpamGuard[src] < 1.0 then return end
     SpamGuard[src] = os.clock()
 
     if not ValidateToken(src, token, seq) then return end

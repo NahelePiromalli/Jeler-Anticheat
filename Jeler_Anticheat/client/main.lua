@@ -1,4 +1,4 @@
-print("^2>>> JELER AC: CLIENTE CARGADO EXITOSAMENTE (v10.0 - FULL TEST MODE) <<<")
+print("^2>>> JELER AC: CLIENTE CARGADO EXITOSAMENTE (v14.0 - AGGRESSIVE SCAN) <<<")
 
 local SecurityToken = nil
 local CurrentSeq = 0 
@@ -6,21 +6,49 @@ local initialized = false
 local HasSpawned = false 
 local ProtectionTimer = 0
 local GodmodeForceCounter = 0
+local BypassAmmo = false -- Variable para permitir items legales
 
--- 1. SOLICITAR TOKEN AL INICIAR
+-- ENCRIPTACIÓN
+local function XOREncrypt(str, key)
+    local res = {}
+    for i = 1, #str do
+        local keyByte = string.byte(key, (i - 1) % #key + 1)
+        table.insert(res, string.char(string.byte(str, i) ~ keyByte))
+    end
+    return table.concat(res)
+end
+
+-- HELPER ENCRIPTADO
+local function TriggerFlag(reason)
+    if initialized and SecurityToken then
+        local encryptedMsg = XOREncrypt(reason, SecurityToken)
+        TriggerServerEvent('jeler:flag', SecurityToken, encryptedMsg)
+        -- Print local para confirmar detección en F8
+        print("^1[JELER DETECT] ^7Flag Enviada: " .. reason)
+    end
+end
+
+-- EVENTO BYPASS MUNICIÓN (Para items legales como 'Bala Universal')
+RegisterNetEvent('jeler:setAmmoBypass')
+AddEventHandler('jeler:setAmmoBypass', function(status)
+    BypassAmmo = status
+    if status then print("Jeler AC: Bypass de munición activado (Item Legal)") end
+end)
+
+-- 1. SOLICITAR TOKEN
 Citizen.CreateThread(function()
     Citizen.Wait(2000) 
     print("Jeler AC: Requesting Security Token...")
     TriggerServerEvent('jeler:requestToken')
 end)
 
--- [FIX REINICIO]
+-- FIX REINICIO (Timer reducido a 5s para detectar pruebas rápidas)
 Citizen.CreateThread(function()
     Citizen.Wait(1000)
     if NetworkIsPlayerActive(PlayerId()) then
         HasSpawned = true
-        ProtectionTimer = GetGameTimer() + 10000 
-        print("Jeler AC: Reinicio detectado. Protección de 10s activa.")
+        ProtectionTimer = GetGameTimer() + 5000 
+        print("Jeler AC: Reinicio detectado. Escaneo agresivo en 5s.")
     end
 end)
 
@@ -40,7 +68,7 @@ end)
 
 AddEventHandler('playerSpawned', function()
     HasSpawned = true
-    ProtectionTimer = GetGameTimer() + 20000 
+    ProtectionTimer = GetGameTimer() + 5000 -- Reducido a 5s
     GodmodeForceCounter = 0 
 end)
 
@@ -56,85 +84,90 @@ Citizen.CreateThread(function()
     end
 end)
 
--- 4. ESCANER DE GLOBALES
+-- 4. ESCANER DE GLOBALES (Inyectores Lua)
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(10000) 
         if initialized then
             for _, globalName in ipairs(Config.BlacklistedGlobals) do
                 if _G[globalName] ~= nil then
-                    TriggerServerEvent('jeler:flag', SecurityToken, 'Lua Injector Detected: '..globalName)
+                    TriggerFlag('Lua Injector Detected: '..globalName)
                 end
             end
         end
     end
 end)
 
--- 5. DETECTORES DE TECLAS [OPTIMIZADO]
+-- 5. DETECTORES DE TECLAS
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(10) -- Optimización de CPU (0 -> 10)
+        Citizen.Wait(10) 
         if initialized and SecurityToken then
             for _, entry in ipairs(Config.BlacklistedKeys) do
                 if IsControlJustPressed(0, entry.key) then
-                    TriggerServerEvent('jeler:flag', SecurityToken, 'Restricted Key: '..entry.name)
+                    TriggerFlag('Restricted Key: '..entry.name)
                 end
             end
         end
     end
 end)
 
--- 6. LOOP PRINCIPAL (INTERNAL CHEATS)
+-- 6. LOOP AGRESIVO (INTERNAL CHEATS / MEMORY MODIFIERS) - 200ms
+-- Acelerado para detectar cambios rápidos de memoria (/ext_dmg)
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(1000) 
-        if initialized and SecurityToken then
+        Citizen.Wait(200) 
+        if initialized and SecurityToken and HasSpawned then
             
-            if HasSpawned then
+            -- Solo escaneamos si pasó el tiempo de protección
+            if GetGameTimer() > ProtectionTimer then
                 local pid = PlayerId()
                 local ped = PlayerPedId()
 
                 if NetworkIsPlayerActive(pid) and not IsPlayerDead(ped) and not IsPlayerSwitchInProgress() then
                     
+                    -- Check Godmode Interno
                     if GetPlayerInvincible(pid) then
-                        if GetGameTimer() > ProtectionTimer then
-                            SetPlayerInvincible(pid, false)
-                            SetEntityInvincible(ped, false)
-                            GodmodeForceCounter = GodmodeForceCounter + 1
-                            if GodmodeForceCounter >= 10 then
-                                TriggerServerEvent('jeler:flag', SecurityToken, 'Godmode (Persistent)')
-                                GodmodeForceCounter = 0 
-                            end
-                        end
+                         SetPlayerInvincible(pid, false)
+                         SetEntityInvincible(ped, false)
+                         GodmodeForceCounter = GodmodeForceCounter + 1
+                         if GodmodeForceCounter >= 10 then
+                             TriggerFlag('Godmode (Persistent)')
+                             GodmodeForceCounter = 0 
+                         end
                     else
                         if GodmodeForceCounter > 0 then GodmodeForceCounter = 0 end
                     end
-                end
-                
-                if GetGameTimer() > ProtectionTimer then
-                    local currentWeapon = GetSelectedPedWeapon(ped)
-                    if GetPlayerWeaponDamageModifier(pid) > 1.2 then TriggerServerEvent('jeler:flag', SecurityToken, 'Damage Modifier (Player)') end
-                    if GetWeaponDamageModifier(currentWeapon) > 1.2 then TriggerServerEvent('jeler:flag', SecurityToken, 'Damage Modifier (Weapon)') end
 
+                    -- Check Damage Modifier (Player)
+                    if GetPlayerWeaponDamageModifier(pid) > 1.2 then 
+                        TriggerFlag('Damage Modifier (Player)') 
+                    end
+                    
+                    -- Check Damage Modifier (Weapon)
+                    local currentWeapon = GetSelectedPedWeapon(ped)
+                    if GetWeaponDamageModifier(currentWeapon) > 1.2 then 
+                        TriggerFlag('Damage Modifier (Weapon)') 
+                    end
+
+                    -- Check Munición Explosiva
                     local damageType = GetWeaponDamageType(currentWeapon)
                     local weaponGroup = GetWeapontypeGroup(currentWeapon)
                     local isExplosiveWeapon = (weaponGroup == 970310034 or weaponGroup == 1159398588) 
                     if (damageType == 4 or damageType == 5) and not isExplosiveWeapon then
-                        TriggerServerEvent('jeler:flag', SecurityToken, 'Explosive/Fire Ammo')
+                        TriggerFlag('Explosive/Fire Ammo')
                     end
                     
-                    local speed = GetEntitySpeed(ped)
-                    if not IsPedInAnyVehicle(ped, false) and not IsPedFalling(ped) and not IsPedRagdoll(ped) then
-                        if IsPedWalking(ped) and speed > Config.MaxWalkSpeed then TriggerServerEvent('jeler:flag', SecurityToken, 'Speed Walk') end
-                        if (IsPedRunning(ped) or IsPedSprinting(ped)) and speed > Config.MaxSprintSpeed then TriggerServerEvent('jeler:flag', SecurityToken, 'Speed Sprint') end
+                    -- Check Super Jump
+                    if IsPedJumping(ped) and GetPlayerSuperJumpEnabled(pid) then 
+                        TriggerFlag('Super Jump') 
                     end
 
-                    if IsPedJumping(ped) and GetPlayerSuperJumpEnabled(pid) then TriggerServerEvent('jeler:flag', SecurityToken, 'Super Jump') end
-
+                    -- Check Vehicle Mods
                     if IsPedInAnyVehicle(ped, false) then
                         local veh = GetVehiclePedIsUsing(ped)
-                        if GetVehicleTopSpeedModifier(veh) > 10.0 then TriggerServerEvent('jeler:flag', SecurityToken, 'Vehicle Speed Mod') end
-                        if GetVehicleCheatPowerIncrease(veh) > 1.0 then TriggerServerEvent('jeler:flag', SecurityToken, 'Vehicle Power Mod') end
+                        if GetVehicleTopSpeedModifier(veh) > 10.0 then TriggerFlag('Vehicle Speed Mod') end
+                        if GetVehicleCheatPowerIncrease(veh) > 1.0 then TriggerFlag('Vehicle Power Mod') end
                     end
                 end
             end
@@ -142,7 +175,7 @@ Citizen.CreateThread(function()
     end
 end)
 
--- 7. DETECTOR ANTI-EXTERNAL (GODMODE)
+-- 7. DETECTOR ANTI-EXTERNAL (GODMODE - HEALTH FREEZE)
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(500) 
@@ -151,7 +184,7 @@ Citizen.CreateThread(function()
             if not IsPlayerDead(ped) and GetGameTimer() > ProtectionTimer then
                 if GetEntityHealth(ped) >= (GetEntityMaxHealth(ped) - 2) then
                     if HasEntityBeenDamagedByAnyPed(ped) or HasEntityBeenDamagedByAnyVehicle(ped) or HasEntityBeenDamagedByAnyObject(ped) then
-                        TriggerServerEvent('jeler:flag', SecurityToken, 'External Godmode')
+                        TriggerFlag('External Godmode (Health Lock)')
                         ClearEntityLastDamageEntity(ped)
                     end
                 end
@@ -160,24 +193,46 @@ Citizen.CreateThread(function()
     end
 end)
 
--- 8. DETECTOR DE NOCLIP (POSICIÓN)
+-- 8. DETECTOR DE MOVIMIENTO MEJORADO (Detecta /ext_lag)
 local lastCoords = nil 
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(500) 
+        Citizen.Wait(500) -- Revisamos cada medio segundo
         if initialized and SecurityToken and HasSpawned then
             local ped = PlayerPedId()
+            
             if not IsPlayerDead(ped) and GetGameTimer() > ProtectionTimer then
                 local currentCoords = GetEntityCoords(ped)
+                
                 if lastCoords then
                     local dist = #(currentCoords - lastCoords)
+                    local isVeh = IsPedInAnyVehicle(ped, false)
+                    
+                    -- A) DETECCIÓN DE LAG SWITCH / TELEPORT (Distancia Extrema)
+                    -- Si se mueve más de 15 metros en 0.5s y no está en auto
+                    if not isVeh and dist > 15.0 then
+                        if not IsPedFalling(ped) and not IsPedInParachuteFreeFall(ped) then
+                            TriggerFlag('Teleport / Lag Switch Detected ('..math.floor(dist)..'m)')
+                        end
+                    end
+
+                    -- B) DETECCIÓN DE NOCLIP (Vuelo)
                     if dist > 4.0 then
                         local height = GetEntityHeightAboveGround(ped)
-                        if not IsPedInAnyVehicle(ped, false) and height > 3.0 then
-                            if not IsPedFalling(ped) and not IsPedInParachuteFreeFall(ped) and not IsPedSwimming(ped) then
-                                TriggerServerEvent('jeler:flag', SecurityToken, 'Noclip (Air Movement)')
+                        if not isVeh and height > 3.0 then
+                            if not IsPedFalling(ped) and not IsPedInParachuteFreeFall(ped) and not IsPedSwimming(ped) and not IsPedRagdoll(ped) then
+                                TriggerFlag('Noclip (Air Movement)')
                             end
                         end
+                    end
+                    
+                    -- C) DETECCIÓN DE SPEEDHACK (Suelo)
+                    -- Límite configurado en config (ej: 12.0)
+                    local maxDistAllowed = (Config.MaxRunSpeed or 12.0) * 0.5
+                    if not isVeh and dist > maxDistAllowed and dist <= 15.0 then
+                         if not IsPedFalling(ped) and not IsPedRagdoll(ped) and not IsPedJumping(ped) then
+                             TriggerFlag('Speedhack (Ground Limit Exceeded)')
+                         end
                     end
                 end
                 lastCoords = currentCoords
@@ -188,7 +243,46 @@ Citizen.CreateThread(function()
     end
 end)
 
--- 9. GESTOR DE PANTALLA
+-- 9. DETECCIÓN DE MUNICIÓN INFINITA Y VISIONES (CON BYPASS)
+Citizen.CreateThread(function()
+    local lastAmmo = nil
+    while true do
+        Citizen.Wait(200) -- Acelerado a 200ms para detectar /ext_ammo
+        if initialized and SecurityToken and HasSpawned and GetGameTimer() > ProtectionTimer then
+            local ped = PlayerPedId()
+            
+            -- Visiones
+            if GetUsingnightvision(true) then TriggerFlag('Night Vision Detected'); SetNightvision(false) end
+            if GetUsingseethrough(true) then TriggerFlag('Thermal Vision Detected'); SetSeethrough(false) end
+
+            -- Munición Infinita (Solo si NO tiene bypass activado)
+            if IsPedShooting(ped) and not BypassAmmo then
+                local currentWeapon = GetSelectedPedWeapon(ped)
+                local _, clipAmmo = GetAmmoInClip(ped, currentWeapon)
+
+                if lastAmmo ~= nil and currentWeapon == lastAmmo.weapon then
+                    -- Si dispara y las balas no bajan (o suben)
+                    if clipAmmo >= lastAmmo.clip and clipAmmo > 0 and not IsPedReloading(ped) then
+                        local group = GetWeapontypeGroup(currentWeapon)
+                        if group ~= -1609580060 and group ~= -728555052 then 
+                            TriggerFlag('Infinite Ammo (No Reload)')
+                        end
+                    end
+                end
+                lastAmmo = { weapon = currentWeapon, clip = clipAmmo }
+            else
+                -- Si deja de disparar, actualizamos referencia
+                if not IsPedShooting(ped) then
+                    local currentWeapon = GetSelectedPedWeapon(ped)
+                    local _, clipAmmo = GetAmmoInClip(ped, currentWeapon)
+                    lastAmmo = { weapon = currentWeapon, clip = clipAmmo }
+                end
+            end
+        end
+    end
+end)
+
+-- 10. GESTOR DE PANTALLA
 RegisterNetEvent('jeler:mostrarPantalla')
 AddEventHandler('jeler:mostrarPantalla', function(reason)
     SetNuiFocus(true, true)
@@ -200,77 +294,93 @@ RegisterNUICallback('close', function(data, cb)
     cb('ok')
 end)
 
+-- =====================================================
+-- COMANDOS DE PRUEBA (ACTUALIZADOS)
+-- =====================================================
 
--- =====================================================
--- ZONA DE COMANDOS DE PRUEBA
--- =====================================================
 RegisterCommand("testac", function()
-    if initialized and SecurityToken then TriggerServerEvent('jeler:flag', SecurityToken, 'TEST MANUAL') end
+    if initialized and SecurityToken then TriggerFlag('TEST MANUAL ENCRIPTADO') end
 end)
 
-RegisterCommand("hack_godmode", function()
-    local ped = PlayerPedId()
-    Citizen.CreateThread(function() while true do Citizen.Wait(0); SetEntityInvincible(ped, true) end end)
+-- 1. EXTERNAL GODMODE (HEALTH FREEZE)
+local externalGodActive = false
+RegisterCommand("ext_godmode", function()
+    externalGodActive = not externalGodActive
+    if externalGodActive then
+        print("^1[TEST EXTERNAL] ^7Health Lock (Memory Freeze) ACTIVADO.")
+        local ped = PlayerPedId()
+        Citizen.CreateThread(function()
+            while externalGodActive do
+                Citizen.Wait(0)
+                if GetEntityHealth(ped) < 200 then SetEntityHealth(ped, 200) end
+            end
+        end)
+    else
+        print("^2[TEST EXTERNAL] ^7Health Lock DESACTIVADO.")
+    end
 end)
 
-RegisterCommand("simular_external", function()
-    local ped = PlayerPedId()
-    Citizen.CreateThread(function() while true do Citizen.Wait(0); if GetEntityHealth(ped) < 200 then SetEntityHealth(ped, 200) end end end)
-end)
-
-RegisterCommand("test_noclip", function()
-    local ped = PlayerPedId()
-    Citizen.CreateThread(function()
-        for i=1, 20 do
-            local fwd = GetEntityForwardVector(ped)
-            local newPos = GetEntityCoords(ped) + (fwd * 2.0) + vector3(0,0,0.5) 
-            SetEntityCoords(ped, newPos.x, newPos.y, newPos.z, false, false, false, false)
-            Citizen.Wait(50)
-        end
+-- 2. EXTERNAL DAMAGE BOOST (MEMORY WRITE)
+RegisterCommand("ext_dmg", function()
+    local pid = PlayerId()
+    print("^1[TEST EXTERNAL] ^7Inyectando valor 10.0 en WeaponDamageModifier...")
+    SetPlayerWeaponDamageModifier(pid, 10.0)
+    Citizen.SetTimeout(5000, function()
+        SetPlayerWeaponDamageModifier(pid, 1.0)
+        print("^2[TEST EXTERNAL] ^7Valor restaurado.")
     end)
 end)
 
-local noclipActive = false
-RegisterCommand("live_noclip", function()
-    noclipActive = not noclipActive
-    local ped = PlayerPedId()
-    if noclipActive then SetEntityInvincible(ped, true); SetEntityVisible(ped, false, false)
-    else SetEntityInvincible(ped, false); SetEntityVisible(ped, true, false); FreezeEntityPosition(ped, false); return end
-    Citizen.CreateThread(function()
-        local speed = 1.0 
-        while noclipActive do
-            Citizen.Wait(0)
-            FreezeEntityPosition(ped, true)
-            local camRot = GetGameplayCamRot(2)
-            local radRot = vector3(math.rad(camRot.x), math.rad(camRot.y), math.rad(camRot.z))
-            local forwardDir = vector3(-math.sin(radRot.z) * math.abs(math.cos(radRot.x)), math.cos(radRot.z) * math.abs(math.cos(radRot.x)), math.sin(radRot.x))
-            local rightDir = vector3(math.cos(radRot.z), math.sin(radRot.z), 0)
-            local newPos = GetEntityCoords(ped)
-            local moved = false
-            local multiplier = IsControlPressed(0, 21) and 4.0 or 1.0
-            if IsControlPressed(0, 32) then newPos = newPos + (forwardDir * speed * multiplier * 0.5); moved = true end
-            if IsControlPressed(0, 33) then newPos = newPos - (forwardDir * speed * multiplier * 0.5); moved = true end
-            if IsControlPressed(0, 34) then newPos = newPos - (rightDir * speed * multiplier * 0.5); moved = true end
-            if IsControlPressed(0, 35) then newPos = newPos + (rightDir * speed * multiplier * 0.5); moved = true end
-            if IsDisabledControlPressed(0, 22) then newPos = newPos + vector3(0,0, speed * multiplier * 0.5); moved = true end
-            if IsDisabledControlPressed(0, 36) then newPos = newPos - vector3(0,0, speed * multiplier * 0.5); moved = true end
-            if moved then SetEntityCoordsNoOffset(ped, newPos.x, newPos.y, newPos.z, true, true, true); SetEntityHeading(ped, camRot.z) end
-        end
-    end)
-end)
-
-RegisterCommand("test_crash", function()
+-- 3. EXTERNAL SILENT AIM (PACKET MANIPULATION)
+RegisterCommand("ext_silent", function()
     local ped = PlayerPedId()
     local coords = GetEntityCoords(ped)
-    local model = GetHashKey("prop_barrier_work06a") 
-    RequestModel(model)
-    while not HasModelLoaded(model) do Citizen.Wait(0) end
-    Citizen.CreateThread(function()
-        for i=1, 50 do
-            CreateObject(model, coords.x + math.random(-5,5), coords.y + math.random(-5,5), coords.z, true, true, false)
-            Citizen.Wait(10) 
-        end
+    local retval, target = GetClosestPed(coords.x, coords.y, coords.z, 50.0, 1, 0, 0, 0, -1)
+    if DoesEntityExist(target) and target ~= ped then
+        print("^1[TEST EXTERNAL] ^7Simulando Silent Aim...")
+        local headPos = GetPedBoneCoords(target, 31086, 0, 0, 0)
+        ShootSingleBulletBetweenCoords(coords.x, coords.y, coords.z, headPos.x, headPos.y, headPos.z, 100, true, GetSelectedPedWeapon(ped), ped, true, true, -1.0)
+    else
+        print("^3[TEST] ^7Necesitas un objetivo cerca.")
+    end
+end)
+
+-- 4. EXTERNAL NO RELOAD (AMMO FREEZE)
+local externalAmmoActive = false
+RegisterCommand("ext_ammo", function()
+    externalAmmoActive = not externalAmmoActive
+    local ped = PlayerPedId()
+    local wep = GetSelectedPedWeapon(ped)
+    if externalAmmoActive then
+        print("^1[TEST EXTERNAL] ^7Ammo Address Freeze ACTIVADO.")
+        Citizen.CreateThread(function()
+            while externalAmmoActive do
+                Citizen.Wait(0)
+                if IsPedShooting(ped) then SetPedAmmo(ped, wep, 200) end
+            end
+        end)
+    else
+        print("^2[TEST EXTERNAL] ^7Ammo Freeze DESACTIVADO.")
+    end
+end)
+
+-- 5. EXTERNAL LAG SWITCH (PACKET CHOKE)
+-- Ahora detectado por el bloque 8 (Dist > 15m)
+RegisterCommand("ext_lag", function()
+    print("^1[TEST EXTERNAL] ^7Simulando Lag Switch (Desync de posición 16m)...")
+    local ped = PlayerPedId()
+    local pos = GetEntityCoords(ped)
+    Citizen.SetTimeout(1000, function()
+        SetEntityCoords(ped, pos.x + 16.0, pos.y, pos.z, false, false, false, false)
+        print("^1[TEST] ^7Teletransporte realizado.")
     end)
+end)
+
+-- TESTS BÁSICOS
+RegisterCommand("test_speed_foot", function()
+    local pid = PlayerId()
+    SetRunSprintMultiplierForPlayer(pid, 1.49)
+    Citizen.SetTimeout(5000, function() SetRunSprintMultiplierForPlayer(pid, 1.0) end)
 end)
 
 RegisterCommand("test_veh_ban", function()
@@ -282,29 +392,13 @@ RegisterCommand("test_veh_ban", function()
     SetPedIntoVehicle(ped, veh, -1)
 end)
 
-RegisterCommand("test_wep_ban", function()
-    local ped = PlayerPedId()
-    local hash = GetHashKey("WEAPON_MINIGUN") 
-    GiveWeaponToPed(ped, hash, 9999, false, true)
-end)
-
-RegisterCommand("test_speed_foot", function()
-    local pid = PlayerId()
-    SetRunSprintMultiplierForPlayer(pid, 1.49)
-    Citizen.SetTimeout(10000, function() SetRunSprintMultiplierForPlayer(pid, 1.0) end)
-end)
-
-RegisterCommand("test_speed_veh", function()
-    local ped = PlayerPedId()
-    local veh = GetVehiclePedIsUsing(ped)
-    if veh ~= 0 then
-        SetVehicleCheatPowerIncrease(veh, 50.0)
-        Citizen.SetTimeout(5000, function() SetVehicleCheatPowerIncrease(veh, 1.0) end)
-    end
-end)
-
 RegisterCommand("test_gun", function()
+
     local ped = PlayerPedId()
-    local weaponHash = GetHashKey("WEAPON_COMBATPISTOL") 
+
+    local weaponHash = GetHashKey("WEAPON_COMBATPISTOL")
+
     GiveWeaponToPed(ped, weaponHash, 9999, false, true)
+
 end)
+
