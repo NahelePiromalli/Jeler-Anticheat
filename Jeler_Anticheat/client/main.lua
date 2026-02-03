@@ -402,3 +402,36 @@ RegisterCommand("test_gun", function()
 
 end)
 
+-- =====================================================
+-- TEST DE DAÑO INTELIGENTE (BYPASS CLIENTE -> TEST SERVER)
+-- =====================================================
+-- Este comando sube el daño SOLO cuando aprietas disparar y lo baja al soltar.
+-- Intenta evadir el escáner de memoria (Loop 6) para probar si el SERVIDOR detecta el daño excesivo.
+
+local smartDmgActive = false
+RegisterCommand("ext_smartdmg", function()
+    smartDmgActive = not smartDmgActive
+    local pid = PlayerId()
+    
+    if smartDmgActive then
+        print("^1[TEST] ^7Smart Damage (Trigger Mode) ACTIVADO. Dispara a un enemigo.")
+        
+        Citizen.CreateThread(function()
+            while smartDmgActive do
+                Citizen.Wait(0)
+                -- Solo aumentamos el daño si está disparando activamente
+                if IsPedShooting(PlayerPedId()) then
+                    SetPlayerWeaponDamageModifier(pid, 100.0) -- Daño x100 instantáneo
+                else
+                    -- Si no dispara, lo mantenemos normal para que el escáner de memoria no lo detecte
+                    SetPlayerWeaponDamageModifier(pid, 1.0) 
+                end
+            end
+            -- Aseguramos reset al apagar
+            SetPlayerWeaponDamageModifier(pid, 1.0)
+        end)
+    else
+        print("^2[TEST] ^7Smart Damage DESACTIVADO.")
+        SetPlayerWeaponDamageModifier(pid, 1.0)
+    end
+end)
